@@ -1,0 +1,55 @@
+name: Unity 6 Windows CI proof (license gated)
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: unity-proof-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  unity-test-and-build:
+    # Intentionally skip until Unity activation is configured and owner explicitly opts in.
+    if: ${{ vars.ENABLE_UNITY_POC == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 115
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Synthetic public safety check
+        run: python3 tools/public_safety_gate.py .
+      - name: Run Unity EditMode tests
+        uses: game-ci/unity-test-runner@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          testMode: editmode
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          projectPath: .
+          artifactsPath: artifacts/test
+      - name: Build synthetic Windows executable
+        uses: game-ci/unity-builder@v4
+        env:
+          UNITY_LICENSE: ${{ secrets.UNITY_LICENSE }}
+          UNITY_EMAIL: ${{ secrets.UNITY_EMAIL }}
+          UNITY_PASSWORD: ${{ secrets.UNITY_PASSWORD }}
+        with:
+          projectPath: .
+          targetPlatform: StandaloneWindows64
+          buildMethod: Beacon.Poc.CIWindowsBuild.Build
+      - name: Hash produced executable
+        run: |
+          test -f build/StandaloneWindows64/BeaconPoc.exe
+          sha256sum build/StandaloneWindows64/BeaconPoc.exe > windows-build.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-windows-build
+          path: |
+            build/StandaloneWindows64/
+            windows-build.sha256
+          retention-days: 1
+          if-no-files-found: error

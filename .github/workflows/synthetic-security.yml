@@ -1,0 +1,32 @@
+name: Synthetic public CI and regression proof
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: synthetic-security-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  security-and-regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Synthetic public safety check
+        run: python3 tools/public_safety_gate.py .
+      - name: Regression checks
+        run: python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Create SHA manifest
+        run: |
+          mkdir -p results
+          python3 tools/produce_receipt.py > results/ci-receipt.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-ci-receipt
+          path: results/ci-receipt.json
+          retention-days: 1
+          if-no-files-found: error
