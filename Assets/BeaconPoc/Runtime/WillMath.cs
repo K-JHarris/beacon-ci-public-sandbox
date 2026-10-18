@@ -6,7 +6,7 @@ namespace Beacon.Poc
         {
             if (current < 0 || gain < 0 || capacity < 0)
                 throw new System.ArgumentOutOfRangeException();
-            return System.Math.Min(capacity, current + gain); // INTENTIONAL PILOT-ONLY OVERFLOW DEFECT; NEVER MERGE
+            return (int)System.Math.Min(capacity, (long)current + gain);
         }
     }
 }
