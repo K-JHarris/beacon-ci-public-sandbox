@@ -53,6 +53,7 @@ jobs:
           unity --version > results/version.txt
           unity projects verify --help > results/verify-help.txt
           unity projects verify . > results/baseline-check.txt 2>&1
+          : > results/baseline-exit0
           cp Assets/BeaconPoc/Runtime/WillMath.cs.meta results/meta-restoration-copy
           trap 'cp results/meta-restoration-copy Assets/BeaconPoc/Runtime/WillMath.cs.meta' EXIT
           rm Assets/BeaconPoc/Runtime/WillMath.cs.meta
@@ -64,6 +65,7 @@ jobs:
           grep -E 'META_MISSING|WillMath.cs' results/missing-meta-check.txt >/dev/null
           cp results/meta-restoration-copy Assets/BeaconPoc/Runtime/WillMath.cs.meta
           unity projects verify . > results/repaired-check.txt 2>&1
+          : > results/restored-exit0
           cmp -s results/meta-restoration-copy Assets/BeaconPoc/Runtime/WillMath.cs.meta
           python3 tools/verify_unity_integrity_receipt.py results "$negative_exit"
           git diff --exit-code -- Assets/

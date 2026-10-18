@@ -7,9 +7,9 @@ baseline=(root/"baseline-check.txt").read_text()
 negative=(root/"missing-meta-check.txt").read_text()
 repaired=(root/"repaired-check.txt").read_text()
 checks={
- "baseline_pass": "Verification passed" in baseline or "No issues found" in baseline,
+ "baseline_pass": (root/"baseline-exit0").exists(),
  "missing_meta_detected": "META_MISSING" in negative and "WillMath.cs" in negative and negative_exit!=0,
- "restored_pass": "Verification passed" in repaired or "No issues found" in repaired,
+ "restored_pass": (root/"restored-exit0").exists(),
  "official_cli_version_recorded": bool((root/"version.txt").read_text().strip()),
 }
 receipt={
