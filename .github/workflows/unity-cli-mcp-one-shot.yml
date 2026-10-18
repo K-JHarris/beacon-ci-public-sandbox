@@ -1,0 +1,59 @@
+# Read-only one-shot discovery for official Unity CLI MCP, no Unity Editor installed.
+# Triggered only by initial creation on main; no scheduled or manual repeat.
+name: One-time official Unity CLI MCP command check
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/unity-cli-mcp-one-shot.yml']
+permissions:
+  contents: read
+jobs:
+  official-mcp-command:
+    if: github.repository == 'K-JHarris/beacon-ci-public-sandbox' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Install Unity official CLI using signed vendor apt repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://hub.unity3d.com/linux/keys/public --output unity-vendor-key
+          gpg --batch --yes --dearmor -o unity-vendor-key.gpg unity-vendor-key
+          sudo install -m 0644 unity-vendor-key.gpg /usr/share/keyrings/Unity_Technologies_ApS.gpg
+          printf '%s\n' \
+            'Types: deb' \
+            'URIs: https://hub.unity3d.com/linux/repos/deb' \
+            'Suites: unstable' \
+            'Components: main' \
+            'Signed-By: /usr/share/keyrings/Unity_Technologies_ApS.gpg' \
+            | sudo tee /etc/apt/sources.list.d/unity-cli.sources >/dev/null
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unity-cli
+      - name: Record exact official Unity CLI MCP/pipeline capability without launching Editor
+        shell: bash
+        env:
+          UNITY_NO_CLOUD: "1"
+          UNITY_NO_PAGER: "1"
+        run: |
+          set -euo pipefail
+          echo "UNITY_CLI_VERSION=$(unity --version)"
+          set +e
+          unity mcp --help > /tmp/mcp-help.txt 2>&1; mcp_status=$?
+          unity pipeline --help > /tmp/pipeline-help.txt 2>&1; pipeline_status=$?
+          unity skill --help > /tmp/skill-help.txt 2>&1; skill_status=$?
+          set -e
+          echo "MCP_COMMAND_EXIT=$mcp_status"
+          echo "PIPELINE_COMMAND_EXIT=$pipeline_status"
+          echo "SKILL_COMMAND_EXIT=$skill_status"
+          echo "MCP_HELP_AVAILABLE=$([ "$mcp_status" -eq 0 ] && echo true || echo false)"
+          echo "PIPELINE_HELP_AVAILABLE=$([ "$pipeline_status" -eq 0 ] && echo true || echo false)"
+          echo "SKILL_HELP_AVAILABLE=$([ "$skill_status" -eq 0 ] && echo true || echo false)"
+          echo "EDITOR_INSTALLED=false"
+          echo "MCP_SERVER_STARTED=false"
+          echo "UNITY_NATIVE_TESTS_EXECUTED=false"
+          echo "WINDOWS_BUILD_EXECUTED=false"
+          echo "NO_UNITY_ACCOUNT_AUTH=true"
