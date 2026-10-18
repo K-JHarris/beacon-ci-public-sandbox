@@ -1,0 +1,64 @@
+name: Unity CLI credential-free discovery
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+permissions:
+  contents: read
+concurrency:
+  group: unity-cli-discovery-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  safe-cli-discovery:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      UNITY_NO_CLOUD: "1"
+      UNITY_NO_PAGER: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check synthetic-source safety and policy
+        run: |
+          python3 tools/public_safety_gate.py .
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Install experimental Unity CLI from official signed Ubuntu repository
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://hub.unity3d.com/linux/keys/public --output unity-vendor-key
+          gpg --batch --yes --dearmor -o unity-vendor-key.gpg unity-vendor-key
+          sudo install -m 0644 unity-vendor-key.gpg /usr/share/keyrings/Unity_Technologies_ApS.gpg
+          printf '%s\n' \
+            'Types: deb' \
+            'URIs: https://hub.unity3d.com/linux/repos/deb' \
+            'Suites: unstable' \
+            'Components: main' \
+            'Signed-By: /usr/share/keyrings/Unity_Technologies_ApS.gpg' \
+            | sudo tee /etc/apt/sources.list.d/unity-cli.sources >/dev/null
+          sudo apt-get update -qq
+          apt-cache policy unity-cli
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unity-cli
+      - name: Inspect CLI without sign-in, activation or Editor execution
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results
+          unity --version | tee results/version.txt
+          unity --help > results/cli-help.txt
+          unity auth --help > results/auth-help.txt
+          unity license --help > results/license-help.txt
+          unity license activate --help > results/license-activate-help.txt
+          unity test --help > results/test-help.txt
+          python3 tools/verify_unity_cli_discovery.py results
+      - name: Publish non-sensitive CLI discovery report
+        uses: actions/upload-artifact@v4
+        with:
+          name: unity-cli-no-credentials-discovery
+          path: |
+            results/discovery.json
+            results/version.txt
+          if-no-files-found: error
+          retention-days: 1
