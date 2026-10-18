@@ -1,0 +1,76 @@
+name: Unity CLI license-free project integrity
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/unity-cli-project-integrity.yml'
+      - 'Assets/**'
+      - 'Packages/**'
+      - 'ProjectSettings/**'
+      - 'tools/verify_unity_integrity_receipt.py'
+      - 'tests/test_cli_integrity_policy.py'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  unity-project-structure:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    env:
+      UNITY_NON_INTERACTIVE: "1"
+      UNITY_NO_CLOUD: "1"
+      UNITY_NO_PAGER: "1"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate synthetic sources and regression contracts
+        run: |
+          python3 tools/public_safety_gate.py .
+          python3 -m unittest discover -s tests -p 'test_*.py' -v
+      - name: Install official Unity CLI signed package
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl --fail --silent --show-error --location --proto '=https' --tlsv1.2 \
+            https://hub.unity3d.com/linux/keys/public --output unity-vendor-key
+          gpg --batch --yes --dearmor -o unity-vendor-key.gpg unity-vendor-key
+          sudo install -m 0644 unity-vendor-key.gpg /usr/share/keyrings/Unity_Technologies_ApS.gpg
+          printf '%s\n' \
+            'Types: deb' \
+            'URIs: https://hub.unity3d.com/linux/repos/deb' \
+            'Suites: unstable' \
+            'Components: main' \
+            'Signed-By: /usr/share/keyrings/Unity_Technologies_ApS.gpg' \
+            | sudo tee /etc/apt/sources.list.d/unity-cli.sources >/dev/null
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends unity-cli
+      - name: Live positive/negative Unity project integrity test
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p results
+          unity --version > results/version.txt
+          unity projects verify --help > results/verify-help.txt
+          unity projects verify . > results/baseline-check.txt 2>&1
+          cp Assets/BeaconPoc/Runtime/WillMath.cs.meta results/meta-restoration-copy
+          trap 'cp results/meta-restoration-copy Assets/BeaconPoc/Runtime/WillMath.cs.meta' EXIT
+          rm Assets/BeaconPoc/Runtime/WillMath.cs.meta
+          set +e
+          unity projects verify . > results/missing-meta-check.txt 2>&1
+          negative_exit=$?
+          set -e
+          test "$negative_exit" -ne 0
+          grep -E 'META_MISSING|WillMath.cs' results/missing-meta-check.txt >/dev/null
+          cp results/meta-restoration-copy Assets/BeaconPoc/Runtime/WillMath.cs.meta
+          unity projects verify . > results/repaired-check.txt 2>&1
+          cmp -s results/meta-restoration-copy Assets/BeaconPoc/Runtime/WillMath.cs.meta
+          python3 tools/verify_unity_integrity_receipt.py results "$negative_exit"
+          git diff --exit-code -- Assets/
+      - name: Upload sanitized integrity receipt
+        uses: actions/upload-artifact@v4
+        with:
+          name: synthetic-unity-cli-project-integrity
+          path: results/integrity-receipt.json
+          retention-days: 1
+          if-no-files-found: error
