@@ -1,0 +1,34 @@
+# Owner-only and manual-only. Never invoked on push, PR or issue.
+name: Owner-approved single Jules synthetic pilot
+on:
+  workflow_dispatch:
+    inputs:
+      confirm:
+        description: 'Type RUN_ONE_FREE_JULES_SANDBOX_PILOT (one free Jules task; never retry)'
+        required: true
+        type: string
+permissions:
+  contents: write # sole purpose: atomic one-time reservation ref, never source edit
+concurrency:
+  group: one-jules-overflow-pilot-ever
+  cancel-in-progress: false
+jobs:
+  create-one-reviewed-session:
+    if: >-
+      github.repository == 'K-JHarris/beacon-ci-public-sandbox' &&
+      github.actor == 'K-JHarris' &&
+      github.ref == 'refs/heads/main' &&
+      github.run_attempt == 1 &&
+      inputs.confirm == 'RUN_ONE_FREE_JULES_SANDBOX_PILOT'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+      - name: Verify sandbox source and reserve at most one provider session
+        env:
+          PILOT_CONFIRM: ${{ inputs.confirm }}
+          GH_TOKEN: ${{ github.token }}
+          JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+        run: python3 tools/jules_onecreate_pilot.py
