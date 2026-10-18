@@ -1,0 +1,26 @@
+name: Synthetic CSharp compile without Unity license
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/synthetic-csharp-compile.yml'
+      - 'tools/synthetic-dotnet-check/**'
+      - 'Assets/BeaconPoc/Runtime/WillMath.cs'
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  source-compile:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Compile real synthetic CSharp source and verify behavior
+        run: |
+          dotnet --version
+          dotnet run --project tools/synthetic-dotnet-check/Smoke.csproj --configuration Release
