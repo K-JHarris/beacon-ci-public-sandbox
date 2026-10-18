@@ -20,8 +20,8 @@ class TestInertJulesContract(unittest.TestCase):
  def test_valid_spec_contract_only(self):
     x=make_request(event())
     self.assertEqual("AUTO_CREATE_PR",x["automationMode"])
-    self.assertFalse(x["requirePlanApproval"])
-    self.assertEqual("main",x["sourceContext"]["githubRepoContext"]["startingBranch"])
+    self.assertTrue(x["requirePlanApproval"])
+    self.assertEqual("pilot/jules-overflow-20261018",x["sourceContext"]["githubRepoContext"]["startingBranch"])
     self.assertNotIn("token",str(x).lower())
  def test_no_cross_repo_or_actor(self):
     for name,value in [("repository",{"full_name":"K-JHarris/Beacon-Lightbane"}),
