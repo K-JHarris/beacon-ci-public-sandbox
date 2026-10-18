@@ -52,9 +52,9 @@ def make_request(event: dict) -> dict:
     )
     return {
         "title":"Synthetic overflow regression pilot issue "+str(number),
-        "sourceContext":{"source":SOURCE,"githubRepoContext":{"startingBranch":"main"}},
+        "sourceContext":{"source":SOURCE,"githubRepoContext":{"startingBranch":"pilot/jules-overflow-20261018"}},
         "prompt":prompt,
-        "requirePlanApproval":False,
+        "requirePlanApproval":True,
         "automationMode":"AUTO_CREATE_PR",
     }
 
