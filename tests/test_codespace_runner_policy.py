@@ -15,9 +15,16 @@ class CodespaceRunnerSecurity(unittest.TestCase):
   for bad in ["unity auth login","unity license activate","UNITY_PASSWORD","UNITY_LICENSE","UnityEntitlementLicense.xml","git push","gh secret"]:
    self.assertNotIn(bad,self.script)
  def test_actual_unity_tests_gated_by_resources(self):
-  for expected in ["--mode EditMode","--allow-install","10 * 1024 * 1024","--execute-method Beacon.Poc.CIWindowsBuild.Build"]:
+  for expected in ["--mode EditMode","INSTALL_FLAGS=(--allow-install)","MIN_FREE_GIB=4","MIN_FREE_GIB=10","--execute-method Beacon.Poc.CIWindowsBuild.Build"]:
    self.assertIn(expected,self.script)
   self.assertNotIn("unity install-modules",self.script)
+ def test_reuse_installed_editor_without_redownload(self):
+  self.assertIn('EDITOR_BIN="$HOME/Unity/Hub/Editor/$VERSION/Editor/Unity"',self.script)
+  self.assertIn('if [[ -x "$EDITOR_BIN" ]]; then',self.script)
+  self.assertIn('INSTALL_FLAGS=()',self.script)
+  self.assertIn('"${INSTALL_FLAGS[@]}"',self.script)
+  self.assertIn('for MOUNT in "$ROOT" "$HOME"; do',self.script)
+  self.assertIn('MISSING_LIBS=',self.script)
  def test_nunit_pass_must_contain_four_tests(self):
   with tempfile.TemporaryDirectory() as d:
    p=Path(d)/"result.xml"

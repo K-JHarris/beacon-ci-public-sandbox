@@ -39,15 +39,40 @@ if [[ "$ACTION" == preflight ]]; then
   exit 0
 fi
 if [[ "$ACTION" == test ]]; then
-  FREE_KB="$(df -Pk "$ROOT" | awk 'END {print $4}')"
-  if [[ ! "$FREE_KB" =~ ^[0-9]+$ ]] || (( FREE_KB < 10 * 1024 * 1024 )); then
-    echo "STOP: less than 10GiB free; no Editor download attempted."; exit 9
+  # The first install needs much more space than tests against an existing Editor.
+  # Never redownload the Editor on a nearly-full Codespace.
+  EDITOR_BIN="$HOME/Unity/Hub/Editor/$VERSION/Editor/Unity"
+  if [[ -x "$EDITOR_BIN" ]]; then
+    MIN_FREE_GIB=4
+    INSTALL_FLAGS=()
+    echo "Detected installed Unity Editor $VERSION; download disabled, requiring 4GiB free."
+    # Linux graphics dependencies can remain missing after the Editor archive installs.
+    MISSING_LIBS="$(ldd "$EDITOR_BIN" 2>/dev/null | grep 'not found' || true)"
+    if [[ -n "$MISSING_LIBS" ]]; then
+      echo "STOP: installed Unity Editor has missing Linux libraries:"
+      printf '%s\\n' "$MISSING_LIBS"
+      exit 14
+    fi
+  else
+    MIN_FREE_GIB=10
+    INSTALL_FLAGS=(--allow-install)
+    echo "Editor not found: first installation requires 10GiB free."
   fi
+  # Check both the workspace (Unity Library) and home (Editor/cache); either can fill.
+  for MOUNT in "$ROOT" "$HOME"; do
+    FREE_KB="$(df -Pk "$MOUNT" | awk 'END {print $4}')"
+    if [[ ! "$FREE_KB" =~ ^[0-9]+$ ]] || (( FREE_KB < MIN_FREE_GIB * 1024 * 1024 )); then
+      echo "STOP: less than ${MIN_FREE_GIB}GiB free on the filesystem holding $MOUNT."
+      echo "Inspect available space with: df -h . \"$HOME\""
+      echo "Do not delete the installed Editor or private files."
+      exit 9
+    fi
+  done
   echo "Starting actual Unity Edit Mode tests using your active Codespace license."
   OUTPUT="results/codespace-editmode.xml"
   rm -f "$OUTPUT"
   set +e
-  timeout 2700 unity test "$ROOT" --mode EditMode --editor-version "$VERSION" --allow-install --timeout 2400 --output "$OUTPUT" -- -nographics > results/codespace-editor-private.log 2>&1
+  timeout 2700 unity test "$ROOT" --mode EditMode --editor-version "$VERSION" "${INSTALL_FLAGS[@]}" --timeout 2400 --output "$OUTPUT" -- -nographics > results/codespace-editor-private.log 2>&1
   CODE=$?
   set -e
   python3 tools/summarize_codespace_unity.py test "$VERSION" "$CODE" "$OUTPUT" > results/codespace-editmode-summary.json
