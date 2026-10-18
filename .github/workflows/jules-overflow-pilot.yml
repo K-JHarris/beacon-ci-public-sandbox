@@ -1,0 +1,56 @@
+# Public sandbox independent check (also defined on pilot base). No secrets, provider API, or merge.
+name: Jules synthetic overflow red-green proof
+on:
+  pull_request:
+    branches: [pilot/jules-overflow-20261018]
+permissions:
+  contents: read
+concurrency:
+  group: jules-overflow-pilot-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+jobs:
+  independent-regression:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout owner-controlled intentionally failing pilot baseline
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9
+        with:
+          dotnet-version: '8.0.x'
+      - name: Independently establish specific failing overflow before agent fix
+        shell: bash
+        run: |
+          set +e
+          output=$(dotnet run --project tools/synthetic-dotnet-check/Smoke.csproj --configuration Release 2>&1)
+          rc=$?
+          set -e
+          printf '%s\n' "$output"
+          if [ "$rc" -eq 0 ]; then
+            echo "::error::Synthetic baseline unexpectedly passed"
+            exit 1
+          fi
+          printf '%s\n' "$output" | grep -F 'Overflow-safe addition: expected'
+      - name: Checkout the exact proposed source commit (no persisted credentials)
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Fail closed on any path other than approved synthetic source
+        shell: bash
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          changed=$(git diff --name-only "$BASE_SHA" "$HEAD_SHA")
+          printf 'Changed paths:\n%s\n' "$changed"
+          test "$changed" = 'Assets/BeaconPoc/Runtime/WillMath.cs'
+          git diff --check "$BASE_SHA" "$HEAD_SHA"
+      - name: Prove repaired behavior with unchanged independently controlled CSharp tests
+        run: dotnet run --project tools/synthetic-dotnet-check/Smoke.csproj --configuration Release
