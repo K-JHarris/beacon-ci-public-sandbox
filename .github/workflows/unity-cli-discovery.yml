@@ -1,7 +1,6 @@
 name: Unity CLI credential-free discovery
 on:
-  push:
-    branches: [main]
+  # Explicit rerun only; avoids repeated CLI installs on every synthetic commit.
   workflow_dispatch: {}
 permissions:
   contents: read

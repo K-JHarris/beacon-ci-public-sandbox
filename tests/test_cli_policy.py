@@ -15,6 +15,9 @@ class CliDiscoverySafety(unittest.TestCase):
         self.assertNotIn("unity license activate --personal", self.wf)
         self.assertNotIn("unity auth login", self.wf)
         self.assertNotIn("unity install 6000", self.wf)
+    def test_discovery_is_manual_only(self):
+        self.assertIn("workflow_dispatch: {}", self.wf)
+        self.assertNotIn("  push:", self.wf)
     def test_safe_remote_only(self):
         self.assertIn("runs-on: ubuntu-24.04", self.wf)
         self.assertIn("persist-credentials: false", self.wf)
