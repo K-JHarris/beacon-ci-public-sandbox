@@ -4,7 +4,6 @@ This module performs NO HTTP, no GitHub writes and no inference. Its sole purpos
 is to fail closed on malformed, unauthorized, or empty-result simulated events.
 Never run it against the owner's private game repository.
 """
-from dataclasses import dataclass
 import json
 import re
 
@@ -59,6 +58,32 @@ def make_request(event: dict) -> dict:
         "automationMode":"AUTO_CREATE_PR",
     }
 
+def authorize_dispatch(event: dict, control: dict) -> dict:
+    """Offline preflight only; NOT a durable reservation or permission grant.
+
+    A real runner must atomically persist a reservation BEFORE POST, using a
+    protected single-concurrency journal. Unknown POST outcomes require manual
+    reconciliation, never another create call. No such runner exists here.
+    """
+    _need(isinstance(event, dict) and isinstance(control, dict), "invalid control schema")
+    _need(control.get("ownerAuthorized") is True, "provider consent absent")
+    _need(control.get("freeAccountVerified") is True, "free entitlement unknown")
+    _need(control.get("paidFallbackEnabled") is False, "paid fallback not forbidden")
+    _need(type(control.get("remainingTasks")) is int and control["remainingTasks"] > 0,
+          "quota exhausted or unknown")
+    _need(type(control.get("maxCreates")) is int and control["maxCreates"] == 1,
+          "one-create budget required")
+    _need(control.get("priorAttemptState") == "NEVER_ATTEMPTED",
+          "prior attempt requires reconciliation; do not retry create")
+    _need(control.get("journalVerified") is True, "durable reservation store unverified")
+    issue=event.get("issue")
+    _need(isinstance(issue,dict) and not issue.get("pull_request"), "issue event required")
+    _need(event.get("label") == {"name":LABEL}, "approval label must be the triggering label")
+    _need(type(issue.get("number")) is int, "issue number must not be boolean")
+    request=make_request(event)
+    return {"decision":"MOCK_PREFLIGHT_ONLY", "request":request,
+            "reservation":"NOT_CREATED", "network_access":False}
+
 def validate_result(result: dict, diff: dict) -> dict:
     """Validate a *mock* agent session plus independent mocked diff metadata.
 
@@ -88,3 +113,4 @@ if __name__=="__main__":
     print(json.dumps({"kind":"inert-jules-contract","version":1,
                       "network_access":False,"credentials_used":False,
                       "result":"STATIC_CONTRACT_ONLY"},sort_keys=True))
+
