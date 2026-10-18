@@ -1,0 +1,49 @@
+# One read-only, source-free status check for already created session.
+# The only trigger is this file's initial commit to main; no cron/manual reruns.
+name: One-time Jules session status snapshot
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/jules-session-status-snapshot.yml'
+permissions:
+  contents: read
+concurrency:
+  group: jules-status-snapshot-5283068170473125786
+  cancel-in-progress: false
+jobs:
+  read-existing-session-only:
+    if: github.repository == 'K-JHarris/beacon-ci-public-sandbox' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - name: Check one existing Jules session (GET only; no prompts or secrets logged)
+        env:
+          JULES_API_KEY: ${{ secrets.JULES_API_KEY }}
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, os, urllib.request, urllib.error
+          key=os.environ.get("JULES_API_KEY", "")
+          if not key:
+              raise SystemExit("STATUS_ERROR: missing sandbox encrypted Jules key")
+          session="5283068170473125786"
+          req=urllib.request.Request("https://jules.googleapis.com/v1alpha/sessions/"+session,
+            headers={"X-Goog-Api-Key":key,"Accept":"application/json"},
+            method="GET")
+          try:
+              with urllib.request.urlopen(req,timeout=25) as resp:
+                  info=json.load(resp)
+          except urllib.error.HTTPError as e:
+              raise SystemExit("STATUS_ERROR: Jules returned HTTP "+str(e.code))
+          except Exception:
+              raise SystemExit("STATUS_ERROR: Jules read failed")
+          name=info.get("name","")
+          if name != "sessions/"+session:
+              raise SystemExit("STATUS_ERROR: unrecognized session response")
+          print("EXISTING_JULES_SESSION="+name)
+          print("SESSION_STATE="+str(info.get("state","UNKNOWN")))
+          print("SESSION_UPDATE_TIME="+str(info.get("updateTime","UNKNOWN")))
+          print("OUTPUT_PR_COUNT="+str(sum(bool(x.get("pullRequest")) for x in info.get("outputs",[]) if isinstance(x,dict))))
+          print("NO_NEW_SESSION_CREATED=true")
+          PY
